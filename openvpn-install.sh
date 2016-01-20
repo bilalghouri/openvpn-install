@@ -56,7 +56,7 @@ newclient () {
 # Try to get our IP from the system and fallback to the Internet.
 # I do this to make the script compatible with NATed servers (lowendspirit.com)
 # and to avoid getting an IPv6.
-IP=$(ip addr | grep 'inet' | grep -v inet6 | grep -vE '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | head -1)
+IP=$(netstat -taepn | grep "ssh" | tr -s ' ' | cut -d ' ' -f4 | cut -d ':' -f1 | head -1)
 if [[ "$IP" = "" ]]; then
 		IP=$(wget -qO- ipv4.icanhazip.com)
 fi
@@ -212,6 +212,8 @@ else
 	chown -R root:root /etc/openvpn/easy-rsa/
 	rm -rf ~/EasyRSA-3.0.1.tgz
 	cd /etc/openvpn/easy-rsa/
+	touch ./vars
+	echo "set_var EASYRSA_KEY_SIZE 1024" > ./vars
 	# Create the PKI, set up the CA, the DH params and the server + client certificates
 	./easyrsa init-pki
 	./easyrsa --batch build-ca nopass
@@ -223,15 +225,12 @@ else
 	cp pki/ca.crt pki/private/ca.key pki/dh.pem pki/issued/server.crt pki/private/server.key /etc/openvpn
 	# Generate server.conf
 	echo "port $PORT
-proto udp
+proto tcp
 dev tun
-sndbuf 0
-rcvbuf 0
 ca ca.crt
 cert server.crt
 key server.key
 dh dh.pem
-topology subnet
 server 10.8.0.0 255.255.255.0
 ifconfig-pool-persist ipp.txt" > /etc/openvpn/server.conf
 	echo 'push "redirect-gateway def1 bypass-dhcp"' >> /etc/openvpn/server.conf
@@ -339,17 +338,14 @@ crl-verify /etc/openvpn/easy-rsa/pki/crl.pem" >> /etc/openvpn/server.conf
 	# client-common.txt is created so we have a template to add further users later
 	echo "client
 dev tun
-proto udp
-sndbuf 0
-rcvbuf 0
+proto tcp
 remote $IP $PORT
 resolv-retry infinite
 nobind
 persist-key
 persist-tun
-remote-cert-tls server
 comp-lzo
-verb 3" > /etc/openvpn/client-common.txt
+verb 7" > /etc/openvpn/client-common.txt
 	# Generates the custom client.ovpn
 	newclient "$CLIENT"
 	echo ""
